@@ -1,0 +1,421 @@
+#include <MD_MAX72xx.h>
+#include <MD_MAX72xx_lib.h>  // For software SPI
+#include <SPI.h>
+#include <MFRC522.h>
+
+//LED STUFF
+#define HARDWARE_TYPE MD_MAX72XX::FC16_HW
+#define MAX_DEVICES 12
+#define CS_PIN 7    // Change to your CS pin
+#define CLK_PIN 8   // Change to your CLK pin
+#define DATA_PIN 6  // Change to your DATA pin
+MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
+
+//RFID STUFF
+#define RST_PIN 5
+#define SS_PIN 10
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+
+//PING STUFF
+const int trigPinA = 2;
+const int echoPinA = A2;
+const int trigPinB = 3;
+const int echoPinB = A3;
+const int trigPinC = 4;
+const int echoPinC = A4;
+// defines variables for ping sensors
+long durationA;
+int distanceA;
+long durationB;
+int distanceB;
+long durationC;
+int distanceC;
+
+//MOTOR STUFF
+#define MOTOR_ARDUINO_PIN A5 //pin used to send commands to motor board
+#define SONG_DURATION 21000  // In milliseconds. Will have to be set after testing
+
+//Joolz's variables
+int ExtPos = 0;
+// Joolz's Variables for ping sensors
+bool BlockedA = false;
+bool BlockedB = false;
+bool BlockedC = false;
+int detectionRange = 40;
+
+long musicFinishTime;
+
+//create names for each switch state to control loop
+enum State {
+  IDLE,
+  PERSON_IS_WATCHING,
+  START_PLAYING,
+  PLAYING,
+  // and so on
+};
+
+State state = IDLE;
+bool isPersonThere = false;
+int timer = 0;
+
+void setup() {
+  // Ping Sensor Setup
+  pinMode(trigPinA, OUTPUT);  // Sets the trigPin as an Output
+  pinMode(echoPinA, INPUT);   // Sets the echoPin as an Input
+  Serial.begin(9600);         // Starts the serial communication
+
+  pinMode(trigPinB, OUTPUT);  // Sets the trigPin as an Output
+  pinMode(echoPinB, INPUT);   // Sets the echoPin as an Input
+  Serial.begin(9600);         // Starts the serial communication
+
+  pinMode(trigPinC, OUTPUT);  // Sets the trigPin as an Output
+  pinMode(echoPinC, INPUT);   // Sets the echoPin as an Input
+  Serial.begin(9600);         // Starts the serial communication
+
+
+  //LED panel Setup
+  mx.begin();
+  mx.control(MD_MAX72XX::INTENSITY, 8);
+  mx.control(MD_MAX72XX::UPDATE, false); //stop the panel updating automatically
+  mx.clear();
+
+
+  //RFID Setup
+  SPI.begin();         // SPI bus
+  mfrc522.PCD_Init();  // MFRC522
+  Serial.begin(9600);
+
+
+  //master slave setup
+  pinMode(MOTOR_ARDUINO_PIN, OUTPUT);
+}
+
+
+//Function makes all necessary calculations to set ExtPos variable based on which ping sensors are blocked
+//Function also sets isPersonThere bool
+void sensorCheck() {
+  // Clears the trigPin
+  digitalWrite(trigPinA, LOW);
+  delayMicroseconds(2);
+  // Sets the trigPin on HIGH state for 10 micro seconds
+  digitalWrite(trigPinA, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinA, LOW);
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  durationA = pulseIn(echoPinA, HIGH);
+  // Calculating the distance
+  distanceA = durationA * 0.034 / 2;
+  // Prints the distance on the Serial Monitor
+  //Serial.print("DistanceA: ");
+  //Serial.println(distanceA);
+
+  // Clears the trigPin
+  digitalWrite(trigPinB, LOW);
+  delayMicroseconds(2);
+  // Sets the trigPin on HIGH state for 10 micro seconds
+  digitalWrite(trigPinB, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinB, LOW);
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  durationB = pulseIn(echoPinB, HIGH);
+  // Calculating the distance
+  distanceB = durationB * 0.034 / 2;
+  // Prints the distance on the Serial Monitor
+  //Serial.print("DistanceB: ");
+  //Serial.println(distanceB);
+
+  // Clears the trigPin
+  digitalWrite(trigPinC, LOW);
+  delayMicroseconds(2);
+  // Sets the trigPin on HIGH state for 10 micro seconds
+  digitalWrite(trigPinC, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinC, LOW);
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  durationC = pulseIn(echoPinC, HIGH);
+  // Calculating the distance
+  distanceC = durationC * 0.034 / 2;
+  // Prints the distance on the Serial Monitor
+  //Serial.print("DistanceC: ");
+  //Serial.println(distanceC);
+
+  //Joolz's code
+  //Sets bools for each sensor based on detection range
+  BlockedA = distanceA < detectionRange;
+  BlockedB = distanceB < detectionRange;
+  BlockedC = distanceC < detectionRange;
+  // the above code means that BlockedX is true or false, based on whether distanceX is smaller than detection range
+
+  // this is some logic to set ExtPos based on which sensors are blocked
+  if (!BlockedA && !BlockedB && !BlockedC) {
+    ExtPos = 0;
+    isPersonThere = false;
+  } else if (BlockedA && BlockedB && BlockedC) {
+    ExtPos = 0;
+    isPersonThere = true;
+  } else if (BlockedA && BlockedB) {
+    ExtPos = -1;
+    isPersonThere = true;
+  } else if (BlockedA && !BlockedB) {
+    ExtPos = -2;
+    isPersonThere = true;
+  } else if (BlockedC && BlockedB) {
+    ExtPos = 1;
+    isPersonThere = true;
+  } else if (BlockedC && !BlockedB) {
+    ExtPos = 2;
+    isPersonThere = true;
+  } else {
+    ExtPos = 0;
+    isPersonThere = true;
+  }
+}
+
+
+//Function sets the panel to the correct looking frame based on ExtPos
+void looking(int ExtPos) {
+
+  switch (ExtPos) {
+      // eyes 2 left
+    case -2:
+      mx.clear();
+      mx.setColumn(45, B11111111);
+      mx.setColumn(46, B11111111);
+      mx.setColumn(57, B11111111);
+      mx.setColumn(58, B11111111);
+      break;
+
+      // Eyes 1 left
+    case -1:
+      mx.clear();
+      mx.setColumn(43, B11111111);
+      mx.setColumn(44, B11111111);
+      mx.setColumn(55, B11111111);
+      mx.setColumn(56, B11111111);
+      break;
+
+      //eyes in the middle
+    case 0:
+      mx.clear();
+      mx.setColumn(41, B11111111);
+      mx.setColumn(42, B11111111);
+      mx.setColumn(53, B11111111);
+      mx.setColumn(54, B11111111);
+      break;
+
+      // eyes 1 right
+    case 1:
+      mx.clear();
+      mx.setColumn(39, B11111111);
+      mx.setColumn(40, B11111111);
+      mx.setColumn(51, B11111111);
+      mx.setColumn(52, B11111111);
+      break;
+
+      // eyes 2 right
+    case 2:
+      mx.clear();
+      mx.setColumn(37, B11111111);
+      mx.setColumn(38, B11111111);
+      mx.setColumn(49, B11111111);
+      mx.setColumn(50, B11111111);
+      break;
+  }
+  mx.update();
+}
+
+//function animates panel to look up, then in the correct looking frame
+void help() {
+
+  mx.clear();
+  mx.update();
+  delay(50);
+
+  mx.clear();
+  mx.setColumn(9, B11111111);
+  mx.setColumn(10, B11111111);
+  mx.setColumn(21, B11111111);
+  mx.setColumn(22, B11111111);
+  mx.update();
+  delay(2000);
+
+  mx.clear();
+  mx.setColumn(9, B00001111);
+  mx.setColumn(10, B00001111);
+  mx.setColumn(21, B00001111);
+  mx.setColumn(22, B00001111);
+  mx.setColumn(41, B00001111);
+  mx.setColumn(42, B00001111);
+  mx.setColumn(53, B00001111);
+  mx.setColumn(54, B00001111);
+  mx.update();
+  delay(50);
+
+  sensorCheck();
+  looking(ExtPos);
+  delay(2000);
+
+  mx.clear();
+  mx.update();
+  delay(50);
+
+  sensorCheck();
+  looking(ExtPos);
+  delay(2000);
+}
+
+
+
+//function animates panel panel face do happy dance
+void happy() {
+
+  //left eye
+  mx.clear();
+  mx.setColumn(6, B00000001);
+  mx.setColumn(57, B00000001);
+  mx.setColumn(56, B00000011);
+  mx.setColumn(58, B00000011);
+  mx.setColumn(55, B00000110);
+  mx.setColumn(59, B00000110);
+  mx.setColumn(54, B00000100);
+  mx.setColumn(60, B00000100);
+  // right eye
+  mx.setColumn(20, B00000001);
+  mx.setColumn(43, B00000001);
+  mx.setColumn(42, B00000011);
+  mx.setColumn(44, B00000011);
+  mx.setColumn(41, B00000110);
+  mx.setColumn(45, B00000110);
+  mx.setColumn(40, B00000100);
+  mx.setColumn(46, B00000100);
+
+  mx.update();
+  delay(1000);
+
+
+  //right eye
+  mx.clear();
+  mx.setColumn(25, B00000001);
+  mx.setColumn(38, B00000001);
+  mx.setColumn(37, B00000011);
+  mx.setColumn(39, B00000011);
+  mx.setColumn(36, B00000110);
+  mx.setColumn(40, B00000110);
+  mx.setColumn(35, B00000100);
+  mx.setColumn(41, B00000100);
+  //left eye
+  mx.setColumn(11, B00000001);
+  mx.setColumn(52, B00000001);
+  mx.setColumn(51, B00000011);
+  mx.setColumn(53, B00000011);
+  mx.setColumn(50, B00000110);
+  mx.setColumn(54, B00000110);
+  mx.setColumn(49, B00000100);
+  mx.setColumn(55, B00000100);
+
+  mx.update();
+  delay(1000);
+}
+
+
+
+//checks if any RFID is present. 
+bool checkRFID() {
+  byte bufferATQA[2];
+  byte bufferSize = sizeof(bufferATQA);
+
+  // Reset baud rates
+  mfrc522.PCD_WriteRegister(MFRC522::PCD_Register::TxModeReg, 0x00);
+  mfrc522.PCD_WriteRegister(MFRC522::PCD_Register::RxModeReg, 0x00);
+  // Reset ModWidthReg
+  mfrc522.PCD_WriteRegister(MFRC522::PCD_Register::ModWidthReg, 0x26);
+
+  MFRC522::StatusCode result = mfrc522.PICC_WakeupA(bufferATQA, &bufferSize);
+
+  // Uncomment to display the status of the RFID chip after we try to wake it up
+  // auto statusWord = MFRC522::GetStatusCodeName(result);
+  // Serial.print("Status: ");
+  // Serial.println(statusWord);
+
+  mfrc522.PICC_HaltA();
+  return result == MFRC522::StatusCode::STATUS_OK || result == MFRC522::StatusCode::STATUS_COLLISION;
+}
+
+void loop() {
+  Serial.println(timer);
+  switch (state) {
+    case IDLE:
+      sensorCheck();    // update sensors variables, including 'isPersonThere'
+      looking(ExtPos);  // Set looking frame based on ping sensors being blocked;
+
+      //if someone is detected, start counting, if they stay there for a certain amount of time, move into PERSON_IS_WATCHING
+      if (isPersonThere == true) {
+        timer = timer + 1;
+        if (timer > 40) {
+          state = PERSON_IS_WATCHING;
+          timer = 0;  // reset the timer
+        }
+      } else {
+        timer = 0;  // reset the timer
+      }
+
+
+      if (checkRFID() == true) {
+        state = START_PLAYING;
+      }
+      break;
+
+
+    case PERSON_IS_WATCHING:
+      help();
+      delay(200);
+
+      sensorCheck(); //Check if person is still there
+      looking(ExtPos);
+
+      if (checkRFID() == true) {
+        state = START_PLAYING;
+      }
+
+      if (isPersonThere == false) {
+        state = IDLE;
+      }
+
+      break;
+
+
+    case START_PLAYING:
+      digitalWrite(MOTOR_ARDUINO_PIN, HIGH);
+      delay(50);
+      digitalWrite(MOTOR_ARDUINO_PIN, LOW);
+      state = PLAYING;
+      musicFinishTime = millis() + SONG_DURATION; //set musicFinishTime to however long the program has been running already + SONG_DURATION
+      break;
+
+
+    case PLAYING:
+      happy(); // Set panel to be happy continuously until..
+
+      //this means that the mechanism can't be activated again until RFID has been removed AND we have waited long enough for the motor to have finished spinning
+      if (millis() > musicFinishTime && !checkRFID()) { //if the song has finished playing, AND the RDID is no longer present, reset
+        state = IDLE;
+      }
+
+
+      // after a certain amount of time has passed, switch to idle
+      // if (isPersonThere == false){
+      //   state = IDLE;
+      // }
+      /*digitalWrite(MOTOR_ARDUINO_PIN, HIGH);
+      bool musicIsDone = true;
+      while (musicIsDone == false) {
+        musicIsDone = digitalRead(MUSIC_IS_DONE_PIN);
+        delay(5);  // wait for a bit
+      }
+      state = IDLE;
+      */
+      break;
+  }
+}
+
+
