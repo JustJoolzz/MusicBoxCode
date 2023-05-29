@@ -1,0 +1,649 @@
+#include <MD_MAX72xx.h>
+#include <MD_MAX72xx_lib.h>  // For software SPI
+#include <SPI.h>
+
+
+#define HARDWARE_TYPE MD_MAX72XX::FC16_HW
+#define MAX_DEVICES 12
+#define CS_PIN 7    // Change to your CS pin
+#define CLK_PIN 8   // Change to your CLK pin
+#define DATA_PIN 6  // Change to your DATA pin
+
+
+
+
+
+
+
+
+MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
+
+
+
+
+
+
+
+
+//Joolz's variables
+int ExtPos = 0;
+// Joolz's Variables for ping sensors
+bool BlockedA = false;
+bool BlockedB = false;
+bool BlockedC = false;
+int detectionRange = 40;
+
+
+
+
+
+
+
+
+// defines pins numbers
+const int trigPinA = 2;
+const int echoPinA = A2;
+
+
+
+
+
+
+
+
+const int trigPinB = 3;
+const int echoPinB = A3;
+
+
+
+
+
+
+
+
+const int trigPinC = 4;
+const int echoPinC = A4;
+
+
+
+
+
+
+
+
+// defines variables for ping sensors
+long durationA;
+int distanceA;
+long durationB;
+int distanceB;
+long durationC;
+int distanceC;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void setup() {
+  pinMode(trigPinA, OUTPUT);  // Sets the trigPin as an Output
+  pinMode(echoPinA, INPUT);   // Sets the echoPin as an Input
+  Serial.begin(9600);         // Starts the serial communication
+
+
+
+
+
+
+
+
+  pinMode(trigPinB, OUTPUT);  // Sets the trigPin as an Output
+  pinMode(echoPinB, INPUT);   // Sets the echoPin as an Input
+  Serial.begin(9600);         // Starts the serial communication
+
+
+
+
+
+
+
+
+  pinMode(trigPinC, OUTPUT);  // Sets the trigPin as an Output
+  pinMode(echoPinC, INPUT);   // Sets the echoPin as an Input
+  Serial.begin(9600);         // Starts the serial communication
+
+
+
+
+
+
+
+
+  mx.begin();
+  mx.control(MD_MAX72XX::INTENSITY, 8);
+  mx.control(MD_MAX72XX::UPDATE, false);
+  mx.clear();
+}
+
+
+
+
+
+
+
+
+//Function makes all necessary calculations to set ExtPos variable based on which ping sensors are blocked
+void sensorCheck() {
+
+
+
+
+
+
+
+
+  // Clears the trigPin
+  digitalWrite(trigPinA, LOW);
+  delayMicroseconds(2);
+  // Sets the trigPin on HIGH state for 10 micro seconds
+  digitalWrite(trigPinA, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinA, LOW);
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  durationA = pulseIn(echoPinA, HIGH);
+  // Calculating the distance
+  distanceA = durationA * 0.034 / 2;
+  // Prints the distance on the Serial Monitor
+  //Serial.print("DistanceA: ");
+  //Serial.println(distanceA);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // Clears the trigPin
+  digitalWrite(trigPinB, LOW);
+  delayMicroseconds(2);
+  // Sets the trigPin on HIGH state for 10 micro seconds
+  digitalWrite(trigPinB, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinB, LOW);
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  durationB = pulseIn(echoPinB, HIGH);
+  // Calculating the distance
+  distanceB = durationB * 0.034 / 2;
+  // Prints the distance on the Serial Monitor
+  //Serial.print("DistanceB: ");
+  //Serial.println(distanceB);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // Clears the trigPin
+  digitalWrite(trigPinC, LOW);
+  delayMicroseconds(2);
+  // Sets the trigPin on HIGH state for 10 micro seconds
+  digitalWrite(trigPinC, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinC, LOW);
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  durationC = pulseIn(echoPinC, HIGH);
+  // Calculating the distance
+  distanceC = durationC * 0.034 / 2;
+  // Prints the distance on the Serial Monitor
+  //Serial.print("DistanceC: ");
+  //Serial.println(distanceC);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  //Joolz's code
+  //Sets bools for each sensor based on detection range
+  BlockedA = distanceA < detectionRange;
+  BlockedB = distanceB < detectionRange;
+  BlockedC = distanceC < detectionRange;
+  // the above code means that BlockedX is true or false, based on whether distanceX is smaller than detection range
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // this is some logic to set ExtPos based on which sensors are blocked
+  if (BlockedA && BlockedB && BlockedC) {
+    ExtPos = 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  } else if (!BlockedA && !BlockedB && !BlockedC) {
+    ExtPos = 0;
+  } else if (BlockedA && BlockedB) {
+    ExtPos = -1;
+  } else if (BlockedA && !BlockedB) {
+    ExtPos = -2;
+  } else if (BlockedC && BlockedB) {
+    ExtPos = 1;
+  } else if (BlockedC && !BlockedB) {
+    ExtPos = 2;
+  } else {
+    ExtPos = 0;
+  }
+}
+
+
+
+
+
+
+
+
+//Function sets the panel to the correct looking frame based on ExtPos
+void looking(int ExtPos) {
+ 
+  switch (ExtPos) {
+      // eyes 2 left
+    case -2:
+      mx.clear();
+      mx.setColumn(45, B11111111);
+      mx.setColumn(46, B11111111);
+      mx.setColumn(57, B11111111);
+      mx.setColumn(58, B11111111);
+      break;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      // Eyes 1 left
+    case -1:
+      mx.clear();
+      mx.setColumn(43, B11111111);
+      mx.setColumn(44, B11111111);
+      mx.setColumn(55, B11111111);
+      mx.setColumn(56, B11111111);
+      break;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      //eyes in the middle
+    case 0:
+      mx.clear();
+      mx.setColumn(41, B11111111);
+      mx.setColumn(42, B11111111);
+      mx.setColumn(53, B11111111);
+      mx.setColumn(54, B11111111);
+      break;
+
+
+
+
+
+
+
+
+
+
+
+
+      // eyes 1 right
+    case 1:
+      mx.clear();
+      mx.setColumn(39, B11111111);
+      mx.setColumn(40, B11111111);
+      mx.setColumn(51, B11111111);
+      mx.setColumn(52, B11111111);
+      break;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      // eyes 2 right
+    case 2:
+      mx.clear();
+      mx.setColumn(37, B11111111);
+      mx.setColumn(38, B11111111);
+      mx.setColumn(49, B11111111);
+      mx.setColumn(50, B11111111);
+      break;
+  }
+
+
+
+
+
+
+
+
+  mx.update();
+}
+
+
+
+
+void help(){
+
+
+
+
+  mx.clear();
+  mx.setColumn(41, B11111111);
+  mx.setColumn(42, B11111111);
+  mx.setColumn(53, B11111111);
+  mx.setColumn(54, B11111111);
+  mx.update();
+
+
+
+
+  delay(2000);
+
+
+
+
+
+
+
+
+  mx.clear();
+  mx.update();
+  delay(50);
+
+
+
+
+  mx.clear();
+  mx.setColumn(41, B11111111);
+  mx.setColumn(42, B11111111);
+  mx.setColumn(53, B11111111);
+  mx.setColumn(54, B11111111);
+  mx.update();
+
+
+
+
+  delay(2000);
+
+
+
+
+  mx.clear();
+  mx.setColumn(9, B00001111);
+  mx.setColumn(10, B00001111);
+  mx.setColumn(21, B00001111);
+  mx.setColumn(22, B00001111);
+  mx.setColumn(41, B00001111);
+  mx.setColumn(42, B00001111);
+  mx.setColumn(53, B00001111);
+  mx.setColumn(54, B00001111);
+  mx.update();
+ 
+
+
+
+
+  delay(50);
+
+
+
+
+  mx.clear();
+  mx.setColumn(9, B11111111);
+  mx.setColumn(10, B11111111);
+  mx.setColumn(21, B11111111);
+  mx.setColumn(22, B11111111);
+  mx.update();
+
+
+
+
+  delay(500);
+
+
+
+
+  mx.clear();
+  mx.setColumn(9, B00001111);
+  mx.setColumn(10, B00001111);
+  mx.setColumn(21, B00001111);
+  mx.setColumn(22, B00001111);
+  mx.setColumn(41, B00001111);
+  mx.setColumn(42, B00001111);
+  mx.setColumn(53, B00001111);
+  mx.setColumn(54, B00001111);
+  mx.update();
+ 
+
+
+
+
+  delay(50);
+
+
+
+
+  mx.clear();
+  mx.update();
+  delay(50);
+ 
+  }
+
+
+
+
+  void happy(){
+
+
+
+
+    //left eye
+    mx.clear();
+    mx.setColumn(6, B00000001);
+    mx.setColumn(57,B00000001);
+    mx.setColumn(56,B00000011);
+    mx.setColumn(58,B00000011);
+    mx.setColumn(55,B00000110);
+    mx.setColumn(59,B00000110);
+    mx.setColumn(54,B00000100);
+    mx.setColumn(60,B00000100);
+    // right eye
+    mx.setColumn(20,B00000001);
+    mx.setColumn(43,B00000001);
+    mx.setColumn(42,B00000011);
+    mx.setColumn(44,B00000011);
+    mx.setColumn(41,B00000110);
+    mx.setColumn(45,B00000110);
+    mx.setColumn(40,B00000100);
+    mx.setColumn(46,B00000100);
+
+
+
+
+    mx.update();
+    delay(1000);
+
+
+
+
+    //right eye
+    mx.clear();
+    mx.setColumn(25, B00000001);
+    mx.setColumn(38,B00000001);
+    mx.setColumn(37,B00000011);
+    mx.setColumn(39,B00000011);
+    mx.setColumn(36,B00000110);
+    mx.setColumn(40,B00000110);
+    mx.setColumn(35,B00000100);
+    mx.setColumn(41,B00000100);
+
+
+
+
+    mx.setColumn(11, B00000001);
+    mx.setColumn(52, B00000001);
+    mx.setColumn(51, B00000011);
+    mx.setColumn(53, B00000011);
+    mx.setColumn(50, B00000110);
+    mx.setColumn(54, B00000110);
+    mx.setColumn(49,B00000100);
+    mx.setColumn(55,B00000100);
+
+
+    mx.update();
+    delay(1000);
+   mx.update();
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void loop() {
+
+
+
+
+
+
+
+
+  sensorCheck();
+  looking(ExtPos);
+  //help();
+  //happy();
+
+
+
+
+}
+
+
