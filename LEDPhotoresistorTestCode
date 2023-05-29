@@ -1,0 +1,49 @@
+#include <LedControl.h>
+
+
+LedControl lc=LedControl(2,4,3,1);
+int Right = 2;
+int Left = 5;
+int analogValue = analogRead(A0)
+
+
+void setup() {
+  pinMode(A0, INPUT); // This tells the arduino to read in the voltage on this pin (this was wired to our potential divider circuit)  
+  Serial.begin(9600);
+
+
+
+
+  //The Max72XX is in power-saving mode on start up, we have to do a wakeup call
+  lc.shutdown(0,false); // wake up call
+  lc.setIntensity(0,8); // set brightness to a medium
+  lc.clearDisplay (0); // clear the display
+}
+
+
+void loop() {
+  int analogValue = analogRead(A0); // this will read the input on analog pin A0 (an integer between 0 and 1023)
+  // you will need a second variable to store the value for your second resistor
+
+
+  bool leftIsBlocked = analogValue < 30;
+  // You will need another `bool rightIsBlocked` variable to do this same test for your second resistor
+
+
+  Serial.println(analogValue); // show the reading on the serial monitor - doing it this way will also let you use the serial plotter
+
+
+  if (leftIsBlocked && rightIsBlocked) {
+    // both photoresistors are blocked
+  } else if (leftIsBlocked) {
+    // move eyes left
+  } else if (rightIsBlocked) {
+    // move eyes right
+  } else {
+    // no photoresistors are blocked
+  }
+
+
+  delay(100); // makes things nicer to look at in the serial plotter
+}
+
